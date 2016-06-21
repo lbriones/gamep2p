@@ -1,0 +1,312 @@
+<script src="/socket.io/socket.io.js"></script>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.6.4/jquery.min.js"></script>
+<script>
+	var socket = io.connect('http://localhost:8080');
+        var user;
+        var challeger;
+        var points =0;
+        var mode;  //Challenger or Challenged
+        
+        var timerId;
+        var timerLeft=0;;
+        
+        var gameId = '';
+
+	// on connection to server, ask for user's name with an anonymous callback
+	socket.on('connect', function(){
+		// call the server-side function 'adduser' and send one parameter (value of prompt)
+                user = prompt("What's your name?");
+		socket.emit('adduser', user);
+	});
+
+
+
+	// listener, whenever the server emits 'updatechat', this updates the chat body
+	socket.on('updatechat', function (username, data) {
+		$('#conversation').append('<b>'+username + ':</b> ' + data + '<br>');
+	});
+
+	// listener, whenever the server emits 'updaterooms', this updates the room the client is in
+	socket.on('updaterooms', function(rooms, current_room) {
+		$('#rooms').empty();
+		$.each(rooms, function(key, value) {
+			//if(value == current_room){
+				$('#rooms').append('<div>' + value + '</div>');
+			//}
+			//else {
+			//	$('#rooms').append('<div><a href="#" onclick="switchRoom(\''+value+'\')">' + value + '</a></div>');
+			//}
+		});
+	});
+
+
+	socket.on('updateusers', function(users, current_user) {
+		$('#users').empty();
+		$.each(users, function(key, value) {
+			if(value == user){
+				$('#users').append('<div>' + value + '</div>');
+			}
+			else {
+				$('#users').append('<div><a href="#" onclick="challengeUser(\''+value+'\')">' + value + '</a></div>');
+			}
+		});
+                
+                $('#conversation').append('<b>' + 'Please select user to challenge' + '</b> ' + '<br>');
+                
+	});
+        
+        
+	socket.on('challenge', function(user, challengeUser, challengePoints  ) {
+		$('#conversation').append('<b>'+challengeUser + ' challenges you (' + user + ') for ' + challengePoints + ' points:</b> ' + '<br>');
+                $('#accept').show();
+                $('#reject').show();
+                challenger = challengeUser;
+                points = challengePoints;
+                
+
+	});
+
+    
+    	socket.on('acceptChallenge', function(user, challengeUser, challengePoints, game  ) {
+		$('#conversation').append('<b>'+challengeUser + ' challenge has been accepted by you (' + user + ') for ' + challengePoints + ' points:</b> ' + '<br>');
+                challenger = challengeUser;
+                points = challengePoints;
+                gameId = game;
+                socket.emit('accept', challenger);
+
+	});
+        
+        socket.on('rejectChallenge', function(user, challengeUser, challengePoints  ) {
+		$('#conversation').append('<b>'+challengeUser + ' challenge has been rejected by you (' + user + ') for ' + challengePoints + ' points:</b> ' + '<br>');
+                challenger = "";
+                points = 0;
+                gameId = '';
+                $('#accept').hide();
+                $('#reject').hide();
+	});
+        
+        socket.on('gameStart', function(user, challengeUser, game   ) {
+		$('#conversation').append('<b>Challenge has started been started for ' + game + '</b> ' + '<br>');
+                
+                
+                challenger = challengeUser;
+                points = challengePoints;
+                gameId = game;
+               
+
+	});
+        
+        socket.on('play', function(turns, lastcolor) {
+            
+		$('#conversation').append('<b>' + user + ' Your turn (' + turns + ')</b>' + '<br>');
+                $('#conversation').append('<b>' + challenger + ' Played ' + lastcolor +  '</b>' + '<br>');
+                
+                $('#red').show();
+                $('#orange').show();
+                $('#yellow').show();
+                $('#green').show();
+                $('#blue').show();
+                $('#violet').show();
+                
+                $('#data').show();
+                $('#datasend').show();
+                $('#time').show();
+                
+                timerLeft = (10000 * turns) + (5000 * (turns -1 ));
+                //AL timer 2000 * turns + 500 * turns -1
+                $('#time').empty();    
+                $('#time').append('<b>' + user + ' Time Remaining ' + (timerLeft/1000) + 's</b>' + '<br>');
+                            
+                timerId = window.setTimeout( timePlay() , 5000);
+                          
+                          
+
+
+	});
+        
+        socket.on('gameResult', function(gameWinner) {
+
+                $('#conversation').append('<b>'+ gameWinner + ' is the Winner</b> ' + '<br>');
+                var now = new Date();
+                
+                socket.emit('resetGame', now.format("dd/M/yy h:mm tt"), user, socket.room, challenger, gameWinner,  score);
+        
+	});
+        
+        function timePlay() { 
+                    timerLeft = timerLeft - 5000;
+                    $('#time').empty();    
+                    $('#time').append('<b>' + user + ' Time Remaining ' + (timerLeft/1000) + 's</b>' + '<br>');
+
+                    if(time <= 0) {
+                        //timeup loose
+                        //send game end
+                        socket.emit('gameResult', user, challenger, challenger,  score);
+                        window.clearTimeout(timerId);
+                        $('#time').hide();
+                    }
+                    else {
+                        //timerId = window.setTimeout(this, 500);
+                    }
+
+        }
+        
+        function switchRoom(room){
+		socket.emit('switchRoom', room);
+	}
+	
+        function challengeUser(user){
+                points = prompt("How much points?", 100);
+		socket.emit('challengeUser', user, points);
+	}
+        
+	// on load of page
+	$(function(){
+		// when the client clicks SEND
+		$('#datasend').click( function() {
+			clearTimeout(timerId);
+                        var message = $('#data').val();
+			$('#data').val('');
+			// tell server to execute 'sendchat' and send along one parameter
+			socket.emit('sendchat', message);
+                
+                                
+		});
+
+		// when the client hits ENTER on their keyboard
+		$('#data').keypress(function(e) {
+			if(e.which == 13) {
+				$(this).blur();
+				$('#datasend').focus().click();
+			}
+		});
+
+    
+    
+                $('#accept').click( function() {
+			var message = challenger;
+			// tell server to execute 'sendchat' and send along one parameter
+			socket.emit('accept', message);
+                        //$('#data').val($(this).val());
+        
+                        $('#accept').hide();
+                        $('#reject').hide();
+
+                        
+		});
+    
+                $('#reject').click( function() {
+			var message = challenger;
+			// tell server to execute 'sendchat' and send along one parameter
+			socket.emit('reject', message);
+                        //$('#data').val($(this).val());
+                        
+                        $('#accept').hide();
+                        $('#reject').hide();
+		});
+
+		$('#red').click( function() {
+			//var message = $(this).val();
+			// tell server to execute 'sendchat' and send along one parameter
+			//socket.emit('sendchat', message);
+                        if($('#data').val() == ''){
+                            $('#data').val($(this).val());                            
+                        }
+                        else {
+                            $('#data').val($('#data').val() + ','  + $(this).val());                            
+                        }
+                        
+		});
+                
+                $('#orange').click( function() {
+	                if($('#data').val() == ''){
+                            $('#data').val($(this).val());                            
+                        }
+                        else {
+                            $('#data').val($('#data').val() + ','  + $(this).val());                            
+                        }
+                        
+		});
+                $('#yellow').click( function() {
+	                if($('#data').val() == ''){
+                            $('#data').val($(this).val());                            
+                        }
+                        else {
+                            $('#data').val($('#data').val() + ','  + $(this).val());                            
+                        }
+                        
+		});
+                $('#green').click( function() {
+	                if($('#data').val() == ''){
+                            $('#data').val($(this).val());                            
+                        }
+                        else {
+                            $('#data').val($('#data').val() + ','  + $(this).val());                            
+                        }
+                        
+		});
+                $('#blue').click( function() {
+	                if($('#data').val() == ''){
+                            $('#data').val($(this).val());                            
+                        }
+                        else {
+                            $('#data').val($('#data').val() + ','  + $(this).val());                            
+                        }
+                        
+		});
+                $('#violet').click( function() {
+	                if($('#data').val() == ''){
+                            $('#data').val($(this).val());                            
+                        }
+                        else {
+                            $('#data').val($('#data').val() + ','  + $(this).val());                            
+                        }
+                        
+		});
+
+                $('#red').hide();
+                $('#orange').hide();
+                $('#yellow').hide();
+                $('#green').hide();
+                $('#blue').hide();
+                $('#violet').hide();
+                
+                $('#accept').hide();
+                $('#reject').hide();
+
+                $('#data').hide();
+                $('#datasend').hide();
+                $('#time').hide();
+	});
+
+</script>
+<div style="float:left;width:100px;border-right:1px solid black;height:500px;padding:10px;overflow:scroll-y;">
+	<b>Games</b>
+	<div id="rooms"></div>
+</div>
+<div style="float:left;width:300px;height:300px;overflow:scroll-y;padding:10px;">
+	<div id="time"></div>
+	<input id="data" style="width:200px;" />        
+        <input type="button" id="datasend" value="send" />
+        <BR>        
+        <input  type="button" id="accept" value="Accept" />	
+        <input  type="button" id="reject" value="Reject" />        
+        <BR>
+        <input style="width:80px;color: #000;background: red;border-color: red" type="button" id="red" value="red" />
+	<BR>
+        <input style="width:80px;color: #000;background: orange;border-color: orange" type="button" id="orange" value="orange" />
+        <BR>
+        <input style="width:80px;color: #000;background: yellow;border-color: yellow" type="button" id="yellow" value="yellow" />
+	<BR>
+        <input style="width:80px;color: #000;background: green;border-color: green" type="button" id="green" value="green" />
+	<BR>
+        <input style="width:80px;color: #000;background: blue;border-color: blue" type="button" id="blue" value="blue" />
+        <BR>
+        <input style="width:80px;color: #000;background: violet;border-color: violet" type="button" id="violet" value="violet" />        
+        <BR><BR>
+        <div id="conversation"></div>
+</div>
+<div style="float:left;width:100px;border-right:1px solid black;height:500px;padding:10px;overflow:scroll-y;">
+	<b>Users</b>
+	<div id="users"></div>
+</div>
